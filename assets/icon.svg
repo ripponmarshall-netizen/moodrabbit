@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MoodRabbit">
+  <rect width="512" height="512" rx="108" fill="#f4efe5"/>
+  <rect x="52" y="52" width="408" height="408" rx="92" fill="#e9eee4" stroke="#9ab7ad" stroke-width="10"/>
+  <path d="M162 292c118 0 206-76 258-195 52 150-4 298-156 298-58 0-102-42-102-103Z" fill="none" stroke="#2f736b" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M162 394c50-76 116-123 203-144" fill="none" stroke="#2f736b" stroke-width="24" stroke-linecap="round"/>
+</svg>
