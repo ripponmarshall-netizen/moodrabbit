@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f4efe5">
+    <meta name="description" content="A calm habit and mood tracker for daily routines, check-ins, and wellbeing patterns.">
+    <meta name="application-name" content="MoodRabbit">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="MoodRabbit">
+    <meta name="format-detection" content="telephone=no">
+    <title>MoodRabbit</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="icon" href="assets/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
+    <link rel="stylesheet" href="styles.css?v=polish-3">
+  </head>
+  <body>
+    <div class="app-shell">
+      <main id="app" class="screen" aria-live="polite"></main>
+    </div>
+
+    <nav class="tabbar" aria-label="Primary">
+      <button class="tab is-active" data-page="today" type="button">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 7.5h14M5 12h10M5 16.5h7"/><path d="m16.5 15.2 1.7 1.7 3.2-3.6"/></svg>
+        </span>
+        <span>Home</span>
+      </button>
+      <button class="tab" data-page="habits" type="button">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8 5.5h8M8 18.5h8"/><path d="M12 5.5v13"/><path d="M6 9.5c0 3.3 2.7 5.8 6 5.8s6-2.5 6-5.8"/></svg>
+        </span>
+        <span>Habits</span>
+      </button>
+      <button class="tab" data-page="mood" type="button">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7.2 13.5c.8 2 2.5 3.2 4.8 3.2s4-1.2 4.8-3.2"/><path d="M8.6 9.2h.01M15.4 9.2h.01"/><path d="M12 21c4.8-3.1 7-6.5 7-10.2a7 7 0 0 0-14 0C5 14.5 7.2 17.9 12 21Z"/></svg>
+        </span>
+        <span>Mood</span>
+      </button>
+      <button class="tab" data-page="patterns" type="button">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 17.5V11M12 17.5V6.5M19 17.5v-4"/><path d="M4 20h16"/><rect x="3.8" y="9" width="2.8" height="8.5" rx="1"/><rect x="10.6" y="4.5" width="2.8" height="13" rx="1"/><rect x="17.4" y="12" width="2.8" height="5.5" rx="1"/></svg>
+        </span>
+        <span>Patterns</span>
+      </button>
+    </nav>
+
+    <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+    <section class="quick-sheet" id="habitSheet" aria-labelledby="habitSheetTitle" aria-modal="true" role="dialog" hidden>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-top">
+        <div>
+          <p class="eyebrow">New routine</p>
+          <h2 id="habitSheetTitle">Add habit</h2>
+        </div>
+        <button class="icon-button" data-close-sheet type="button" aria-label="Close habit form">
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <form id="habitForm" class="panel-form">
+        <label>
+          <span>Name</span>
+          <input name="name" autocomplete="off" required placeholder="Evening stretch">
+        </label>
+        <div class="form-row">
+          <label>
+            <span>Category</span>
+            <select name="category">
+              <option>Body</option>
+              <option>Mind</option>
+              <option>Focus</option>
+              <option>Care</option>
+            </select>
+          </label>
+          <label>
+            <span>Icon</span>
+            <select name="icon">
+              <option value="stretching">Stretching</option>
+              <option value="water">Water</option>
+              <option value="sleep">Sleep</option>
+              <option value="workout">Workout</option>
+              <option value="reading">Reading</option>
+              <option value="meditation">Meditation</option>
+              <option value="vitamins">Vitamins</option>
+              <option value="coding">Coding</option>
+              <option value="journaling">Journaling</option>
+              <option value="walking">Walking</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>Target frequency</span>
+          <select name="frequency">
+            <option>Daily</option>
+            <option>Weekdays</option>
+            <option>3x weekly</option>
+            <option>Weekly</option>
+          </select>
+        </label>
+        <div class="form-row">
+          <label>
+            <span>Due</span>
+            <input name="due" autocomplete="off" value="Today" placeholder="Today">
+          </label>
+          <label>
+            <span>Starting streak</span>
+            <input name="streak" type="number" min="0" step="1" value="0">
+          </label>
+        </div>
+        <label>
+          <span>Status</span>
+          <select name="status">
+            <option value="due">Due today</option>
+            <option value="due-later">Due later</option>
+            <option value="done">Done today</option>
+            <option value="missed">Missed</option>
+          </select>
+        </label>
+        <button class="primary-action" type="submit">Add habit</button>
+      </form>
+    </section>
+
+    <section class="quick-sheet" id="moodSheet" aria-labelledby="moodSheetTitle" aria-modal="true" role="dialog" hidden>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-top">
+        <div>
+          <p class="eyebrow">Daily check-in</p>
+          <h2 id="moodSheetTitle">Log mood</h2>
+        </div>
+        <button class="icon-button" data-close-sheet type="button" aria-label="Close mood form">
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <form id="moodForm" class="panel-form">
+        <div class="mood-picker" id="sheetMoodPicker" aria-label="Choose a mood"></div>
+        <label>
+          <span class="range-label">
+            Energy
+            <output id="moodEnergyValue" for="moodEnergy">7/10</output>
+          </span>
+          <div class="range-shell">
+            <input id="moodEnergy" name="energy" type="range" min="1" max="10" value="7" aria-describedby="energyScale">
+            <div class="range-marks" id="energyScale" aria-hidden="true">
+              <span>1</span>
+              <span>3</span>
+              <span>5</span>
+              <span>8</span>
+              <span>10</span>
+            </div>
+          </div>
+        </label>
+        <label>
+          <span>Note</span>
+          <textarea name="note" rows="3" placeholder="Optional reflection"></textarea>
+        </label>
+        <button class="primary-action" type="submit">Save mood</button>
+      </form>
+    </section>
+
+    <section class="quick-sheet" id="settingsSheet" aria-labelledby="settingsSheetTitle" aria-modal="true" role="dialog" hidden>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-top">
+        <div>
+          <p class="eyebrow">Preferences</p>
+          <h2 id="settingsSheetTitle">Settings</h2>
+        </div>
+        <button class="icon-button" data-close-sheet type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="settings-list">
+        <label class="setting-row">
+          <span>
+            <strong>Gentle reminders</strong>
+            <small>Keep missed routines visible without loud alerts.</small>
+          </span>
+          <input type="checkbox" checked>
+        </label>
+        <label class="setting-row">
+          <span>
+            <strong>Private notes</strong>
+            <small>Store reflection text locally for now.</small>
+          </span>
+          <input type="checkbox" checked>
+        </label>
+        <div class="settings-group" aria-label="Data tools">
+          <p class="mini-label">Data</p>
+          <button class="setting-action" id="removeSampleData" type="button">
+            <span>
+              <strong>Remove sample data</strong>
+              <small>Keep only your own locally created habits, moods, and entries.</small>
+            </span>
+          </button>
+          <button class="setting-action" id="exportBackup" type="button">
+            <span>
+              <strong>Export backup</strong>
+              <small>Download a local JSON backup of this app state.</small>
+            </span>
+          </button>
+          <button class="setting-action" id="importBackupButton" type="button">
+            <span>
+              <strong>Import backup</strong>
+              <small>Merge a MoodRabbit JSON backup into this device.</small>
+            </span>
+          </button>
+          <input id="importBackupFile" type="file" accept="application/json,.json" hidden>
+        </div>
+        <article class="settings-note">
+          <p class="mini-label">Local first</p>
+          <p>Your tracker stays on this device. Backups export plain JSON, imports merge into local storage, and sample data can be removed without touching your own logs.</p>
+        </article>
+      </div>
+    </section>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+    <script src="app.js?v=polish-2" type="module"></script>
+  </body>
+</html>
