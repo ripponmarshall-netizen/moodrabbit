@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.4";
 const STORAGE_KEY = "moodrabbit:v1";
 
 const app = document.querySelector("#app");
@@ -18,6 +18,8 @@ const removeSampleDataButton = document.querySelector("#removeSampleData");
 const exportBackupButton = document.querySelector("#exportBackup");
 const importBackupButton = document.querySelector("#importBackupButton");
 const importBackupFile = document.querySelector("#importBackupFile");
+const themeModeButtons = document.querySelectorAll("[data-theme-mode]");
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 const today = new Date();
 const pages = ["today", "habits", "mood", "patterns"];
@@ -43,7 +45,7 @@ const icons = {
   coding: `<svg viewBox="0 0 24 24"><path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13 5.5l-2 13"/></svg>`,
   journaling: `<svg viewBox="0 0 24 24"><path d="M7 4.5h9.5A1.5 1.5 0 0 1 18 6v13.5H7A2 2 0 0 1 5 17.5v-11a2 2 0 0 1 2-2Z"/><path d="M8 8h6M8 11.5h7M8 15h4"/></svg>`,
   stretching: `<svg viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="2"/><path d="M12 8v5.5M8 11.5h8M9 20l3-6.5 3 6.5"/></svg>`,
-  walking: `<svg viewBox="0 0 24 24"><circle cx="13" cy="5" r="2"/><path d="M12 8.5 9.5 13H14l-1.5 7"/><path d="M9.5 13 6 20M14 13l4 3"/></svg>`,
+  walking: `<svg viewBox="0 0 24 24"><circle cx="12.5" cy="5" r="2"/><path d="M12 8 9.5 12.2l3.5 2.1 2-3.3"/><path d="M10.2 12.2 7 19M13 14.3l-1.4 5.7M14.7 11.2l3 2.8M9.8 8.8 7.4 11.4"/></svg>`,
   happy: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 10h.01M15.5 10h.01M8.7 14c.8 1.4 1.9 2.1 3.3 2.1s2.5-.7 3.3-2.1"/></svg>`,
   calm: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 10.5h.01M15.5 10.5h.01M8 14c1.4.9 2.7 1.3 4 1.3s2.6-.4 4-1.3"/></svg>`,
   focused: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>`,
@@ -104,8 +106,10 @@ const moods = [
 
 const starterState = {
   theme: "light",
+  themeMode: "auto",
   selectedMood: "calm",
   energy: 7,
+  energyLogs: [],
   habits: [
     { id: 1, name: "Morning walk", category: "Body", icon: "walking", frequency: "Daily", streak: 12, status: "done", due: "7:00 AM", last: "Today" },
     { id: 2, name: "Water balance", category: "Care", icon: "water", frequency: "Daily", streak: 8, status: "due", due: "All day", last: "2 of 6 logged" },
@@ -235,8 +239,10 @@ function parseBackup(text) {
 
   return {
     theme: importedState.theme,
+    themeMode: importedState.themeMode,
     selectedMood: importedState.selectedMood,
     energy: importedState.energy,
+    energyLogs: Array.isArray(importedState.energyLogs) ? importedState.energyLogs : [],
     habits: Array.isArray(importedState.habits) ? importedState.habits : [],
     entries: Array.isArray(importedState.entries) ? importedState.entries : [],
     moodLogs: Array.isArray(importedState.moodLogs) ? importedState.moodLogs : []
@@ -248,20 +254,28 @@ function mergeImportedState(importedState) {
   const nextHabits = mergeById(state.habits, importedState.habits, "habit");
   const nextEntries = mergeById(state.entries, importedState.entries, "entry");
   const nextMoodLogs = mergeMoodLogs(state.moodLogs, importedState.moodLogs);
+  const nextEnergyLogs = mergeMoodLogs(state.energyLogs || [], importedState.energyLogs || []);
 
   added += nextHabits.length - state.habits.length;
   added += nextEntries.length - state.entries.length;
   added += nextMoodLogs.length - state.moodLogs.length;
+  added += nextEnergyLogs.length - (state.energyLogs || []).length;
 
   state = {
     ...state,
     habits: nextHabits,
     entries: nextEntries,
-    moodLogs: nextMoodLogs
+    moodLogs: nextMoodLogs,
+    energyLogs: nextEnergyLogs
   };
 
   if (importedState.theme === "light" || importedState.theme === "dark") {
     state.theme = importedState.theme;
+  }
+
+  if (["auto", "light", "dark"].includes(importedState.themeMode)) {
+    state.themeMode = importedState.themeMode;
+    state.theme = getResolvedTheme();
   }
 
   if (moods.some((mood) => mood.id === importedState.selectedMood)) {
@@ -308,7 +322,8 @@ function removeSampleData() {
     ...state,
     habits: state.habits.filter(isUserHabit),
     entries: getUserEntries(),
-    moodLogs: getUserMoodLogs()
+    moodLogs: getUserMoodLogs(),
+    energyLogs: getUserEnergyLogs()
   };
   saveState();
   closeSheets();
@@ -342,6 +357,17 @@ function getUserMoodLogs() {
   });
 }
 
+function getUserEnergyLogs() {
+  return (state.energyLogs || []).filter((log) => log?.source === "user" || Boolean(log?.createdAt));
+}
+
+function getEnergyAverage() {
+  const logs = [...getUserEnergyLogs(), ...getUserMoodLogs()];
+  return logs.length
+    ? Math.round(logs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / logs.length)
+    : Number(state.energy || 0);
+}
+
 function getMoodLogKey(log) {
   return log?.createdAt || String(log?.id || `${log?.mood || ""}-${log?.date || ""}-${log?.note || ""}`);
 }
@@ -356,6 +382,36 @@ function getMoodLabel(id) {
 
 function getMoodScore(id) {
   return moods.find((mood) => mood.id === id)?.score || 0;
+}
+
+function getThemeMode() {
+  if (["auto", "light", "dark"].includes(state.themeMode)) return state.themeMode;
+  if (state.theme === "dark" || state.theme === "light") return state.theme;
+  return "auto";
+}
+
+function getResolvedTheme() {
+  const mode = getThemeMode();
+  return mode === "auto" ? (systemThemeQuery.matches ? "dark" : "light") : mode;
+}
+
+function updateThemeModeControls() {
+  const mode = getThemeMode();
+  themeModeButtons.forEach((button) => {
+    const isActive = button.dataset.themeMode === mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function setThemeMode(mode) {
+  if (!["auto", "light", "dark"].includes(mode)) return;
+  state.themeMode = mode;
+  state.theme = getResolvedTheme();
+  saveState();
+  renderApp();
+  updateThemeModeControls();
+  showToast(mode === "auto" ? "Auto night mode on" : `${mode === "dark" ? "Dark" : "Light"} mode on`);
 }
 
 function icon(name) {
@@ -422,7 +478,7 @@ function renderTopbar(page = activePage) {
   return `
     <header class="topbar" id="today">
       <div class="brand-line">
-        <div class="brandmark" aria-hidden="true">${icon(pageMeta.icon)}</div>
+        <button class="brandmark" data-open-settings type="button" aria-label="Open settings" title="Settings and theme">${renderPixelRabbit()}</button>
         <div>
           <p class="kicker">${monthName()} - ${formatDateContext(today)}</p>
           <h1>${pageMeta.title}</h1>
@@ -434,13 +490,10 @@ function renderTopbar(page = activePage) {
 }
 
 function renderQuickActions() {
-  const themeIcon = state.theme === "dark" ? icon("sun") : icon("moon");
   return `
     <section class="quick-actions" aria-label="Quick actions">
       <button class="primary-action" data-open-habit type="button">${icon("plus")} Add habit</button>
       <button class="secondary-action" data-open-mood type="button">${icon("heart")} Log mood</button>
-      <button class="secondary-action" data-open-settings type="button">${icon("gear")} Settings</button>
-      <button class="secondary-action" data-toggle-theme type="button">${themeIcon} Theme</button>
     </section>
   `;
 }
@@ -471,15 +524,27 @@ function renderKpis() {
   const due = state.habits.filter((habit) => habit.status !== "done").length;
   const done = state.habits.filter((habit) => habit.status === "done").length;
   const bestStreak = state.habits.length ? Math.max(...state.habits.map((habit) => habit.streak || 0)) : 0;
-  const energyAverage = state.moodLogs.length
-    ? `${Math.round(state.moodLogs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / state.moodLogs.length)}/10`
+  const consistency = state.habits.length ? Math.round((done / state.habits.length) * 100) : 0;
+  const recentMoodLogs = getUserMoodLogs().slice(0, 4);
+  const energyLogCount = getUserEnergyLogs().length + getUserMoodLogs().length;
+  const moodTrend = recentMoodLogs.length >= 2
+    ? (() => {
+        const latest = getMoodScore(recentMoodLogs[0].mood);
+        const previousAverage = recentMoodLogs.slice(1).reduce((sum, log) => sum + getMoodScore(log.mood), 0) / (recentMoodLogs.length - 1);
+        if (latest > previousAverage + 0.5) return "Rising";
+        if (latest < previousAverage - 0.5) return "Lower";
+        return "Steady";
+      })()
+    : "New";
+  const energyAverage = energyLogCount
+    ? `${getEnergyAverage()}/10`
     : "--";
   const cards = [
     ["Habits due today", due, "open routines"],
     ["Completed today", done, `${state.habits.length} tracked`],
     ["Current streak", `${bestStreak}d`, "best active habit"],
-    ["Weekly consistency", "82%", "steady week"],
-    ["Mood trend", "Steady", "last 4 logs"],
+    ["Weekly consistency", `${consistency}%`, "done today"],
+    ["Mood trend", moodTrend, `${recentMoodLogs.length || 0} recent logs`],
     ["Energy average", energyAverage, "this week"]
   ];
 
@@ -560,11 +625,88 @@ function renderAttention() {
   `;
 }
 
+function getRabbitCoachMessage() {
+  const missedHabit = state.habits.find((habit) => habit.status === "missed");
+  if (missedHabit) {
+    return {
+      tone: "Gentle reset",
+      title: `${missedHabit.name} can restart small.`,
+      text: `Try one low-friction step for ${String(missedHabit.due || "today").toLowerCase()}. Progress still counts when it is quiet.`
+    };
+  }
+
+  const dueHabit = state.habits.find((habit) => habit.status === "due" || habit.status === "due-later");
+  if (dueHabit) {
+    return {
+      tone: "Next best step",
+      title: `${dueHabit.name} is your next easy win.`,
+      text: `${dueHabit.frequency} target due ${String(dueHabit.due || "today").toLowerCase()}. Keep it simple and mark it when done.`
+    };
+  }
+
+  const latestMood = getUserMoodLogs()[0] || state.moodLogs[0];
+  if (latestMood && Number(latestMood.energy || 0) <= 4) {
+    return {
+      tone: "Energy care",
+      title: "Keep the next step gentle.",
+      text: `${getMoodLabel(latestMood.mood)} with ${latestMood.energy}/10 energy is a good signal to lower the pressure.`
+    };
+  }
+
+  const done = state.habits.filter((habit) => habit.status === "done").length;
+  if (done) {
+    return {
+      tone: "Momentum",
+      title: `${done} routine${done === 1 ? "" : "s"} already complete.`,
+      text: "You are building consistency. Keep the rest of today light and realistic."
+    };
+  }
+
+  return {
+    tone: "Start here",
+    title: "One check-in is enough to begin.",
+    text: "Add a habit or log a mood, then MoodRabbit will start finding useful patterns."
+  };
+}
+
+function renderPixelRabbit() {
+  return `
+    <div class="pixel-rabbit" aria-hidden="true">
+      <span class="rabbit-ear left"></span>
+      <span class="rabbit-ear right"></span>
+      <span class="rabbit-head">
+        <i class="rabbit-eye left"></i>
+        <i class="rabbit-eye right"></i>
+        <i class="rabbit-mouth"></i>
+      </span>
+      <span class="rabbit-body"></span>
+    </div>
+  `;
+}
+
+function renderRabbitCoach() {
+  const message = getRabbitCoachMessage();
+  return `
+    <section class="section-block coach-section" aria-label="MoodRabbit coach">
+      <article class="coach-card">
+        <div class="coach-visual">
+          ${renderPixelRabbit()}
+        </div>
+        <div class="coach-copy">
+          <p class="mini-label">${message.tone}</p>
+          <h2>${message.title}</h2>
+          <p>${message.text}</p>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
 function renderHabitCard(habit) {
   const accent = habitPalette[habit.icon] || "var(--brand)";
   const action = habit.status === "done"
-    ? `<button class="secondary-action icon-action" data-undo-habit="${habit.id}" type="button" aria-label="Move ${habit.name} back to due">${icon("check")}</button>`
-    : `<button class="mark-button icon-action" data-complete-habit="${habit.id}" type="button" aria-label="Complete ${habit.name}">${icon("check")}</button>`;
+    ? `<button class="secondary-action icon-action" data-undo-habit="${habit.id}" type="button" aria-label="Move ${habit.name} back to due" title="Move back to due">${icon("check")}</button>`
+    : `<button class="mark-button icon-action" data-complete-habit="${habit.id}" type="button" aria-label="Complete ${habit.name}" title="Mark complete">${icon("check")}</button>`;
 
   return `
     <article class="habit-card ${statusClass(habit.status)}" style="--accent: ${accent}">
@@ -578,7 +720,6 @@ function renderHabitCard(habit) {
         </div>
         ${statusPill(habit.status)}
       </div>
-      <p class="habit-streak">${habit.streak} day streak</p>
       <div class="habit-meta">
         <div>
           <span>Target</span>
@@ -589,15 +730,14 @@ function renderHabitCard(habit) {
           <strong>${habit.due}</strong>
         </div>
         <div>
-          <span>Last note</span>
-          <strong>${habit.last}</strong>
+          <span>Streak</span>
+          <strong>${habit.streak}d</strong>
         </div>
       </div>
       <div class="habit-card-bottom">
-        <p class="mini-label">Habit streaks</p>
         <div class="habit-card-actions">
           <button class="secondary-action" data-edit-habit="${habit.id}" type="button">${icon("gear")} Edit</button>
-          <button class="secondary-action danger-action" data-delete-habit="${habit.id}" type="button">Delete</button>
+          <button class="secondary-action danger-action" data-delete-habit="${habit.id}" type="button" title="Delete habit">Delete</button>
           ${action}
         </div>
       </div>
@@ -611,7 +751,7 @@ function renderHabits() {
       <div class="section-heading">
         <div>
           <h2>Today's habits</h2>
-          <p>Clean cards for the routines that matter today.</p>
+          <p>Routines due now and later.</p>
         </div>
         <span class="mini-label">${state.habits.length} active</span>
       </div>
@@ -643,12 +783,14 @@ function renderMoodPicker(selected = state.selectedMood) {
 
 function renderMoodSection() {
   const selected = moods.find((mood) => mood.id === state.selectedMood) || moods[0];
+  const energyAverage = getEnergyAverage();
+  const energyLogCount = getUserEnergyLogs().length + getUserMoodLogs().length;
   return `
     <section class="section-block" id="mood">
       <div class="section-heading">
         <div>
           <h2>Mood check-in</h2>
-          <p>Choose an emotion icon, add energy, and keep the record light.</p>
+          <p>Choose a mood and log energy.</p>
         </div>
         <span class="state-pill is-success">${selected.label}</span>
       </div>
@@ -666,12 +808,26 @@ function renderMoodSection() {
         <div class="mood-lock-row">
           <button class="primary-action mood-lock-action" data-lock-mood type="button">${icon("check")} Log ${selected.label}</button>
         </div>
-        <div class="energy-row">
-          <div class="section-heading">
-            <p class="mini-label">Energy average</p>
-            <p>${state.energy}/10 today</p>
+        <div class="energy-card">
+          <div class="energy-card-head">
+            <div>
+              <p class="mini-label">Energy check-in</p>
+              <h3 data-energy-heading>${state.energy}/10 energy</h3>
+              <p>${energyLogCount ? `${energyAverage}/10 average from your logs` : "Log energy on its own when mood is not the focus."}</p>
+            </div>
+            <output class="energy-output" data-energy-output for="inlineEnergy">${state.energy}/10</output>
           </div>
-          <div class="energy-meter" aria-label="Energy ${state.energy} out of 10" style="--energy: ${state.energy * 10}%"><span></span></div>
+          <div class="energy-control">
+            <input id="inlineEnergy" data-energy-input type="range" min="1" max="10" step="1" value="${state.energy}" aria-label="Energy level">
+            <div class="range-marks" aria-hidden="true">
+              <span>1</span>
+              <span>3</span>
+              <span>5</span>
+              <span>8</span>
+              <span>10</span>
+            </div>
+          </div>
+          <button class="secondary-action energy-log-action" data-log-energy type="button">${icon("check")} Log energy</button>
         </div>
       </article>
     </section>
@@ -700,7 +856,7 @@ function renderMoodHistory() {
                 <strong>${moodLabel}</strong>
                 <p>Energy ${log.energy}/10 - ${log.note || "Mood check-in"}</p>
               </div>
-              <button class="icon-button inline-delete" data-delete-mood-log="${encodeURIComponent(getMoodLogKey(log))}" type="button" aria-label="Delete ${moodLabel} mood log">×</button>
+              <button class="icon-button inline-delete" data-delete-mood-log="${encodeURIComponent(getMoodLogKey(log))}" type="button" aria-label="Delete ${moodLabel} mood log" title="Delete mood log">×</button>
             </article>
           `;
         }).join("") : `
@@ -724,11 +880,11 @@ function renderMoodTrendChart() {
   if (!userMoodLogs.length) return "";
 
   const chartLogs = userMoodLogs.slice(0, 7).reverse();
-  const width = 260;
+  const width = 300;
   const height = 104;
-  const xStart = 16;
+  const xStart = 52;
   const yStart = 18;
-  const chartWidth = width - 32;
+  const chartWidth = width - 68;
   const chartHeight = height - 38;
   const points = chartLogs.map((log, index) => {
     const energy = Math.min(10, Math.max(1, Number(log.energy || 1)));
@@ -748,7 +904,7 @@ function renderMoodTrendChart() {
       <div class="section-heading">
         <div>
           <h2>Mood trend</h2>
-          <p>A small chart based only on moods you logged.</p>
+          <p>Energy across recent check-ins.</p>
         </div>
         <span class="state-pill is-success">${getMoodLabel(latest.mood)}</span>
       </div>
@@ -761,7 +917,19 @@ function renderMoodTrendChart() {
           </div>
         </div>
         <svg class="mood-trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Mood energy trend chart">
-          <path class="chart-grid-line" d="M 14 20 H 246M 14 52 H 246M 14 84 H 246"/>
+          <path class="chart-grid-line" d="M 52 20 H 284M 52 52 H 284M 52 84 H 284"/>
+          <g class="chart-axis-label">
+            <rect x="8" y="12" width="28" height="18" rx="6"/>
+            <text x="22" y="24">10</text>
+          </g>
+          <g class="chart-axis-label">
+            <rect x="8" y="44" width="28" height="18" rx="6"/>
+            <text x="22" y="56">5</text>
+          </g>
+          <g class="chart-axis-label">
+            <rect x="8" y="76" width="28" height="18" rx="6"/>
+            <text x="22" y="88">1</text>
+          </g>
           ${points.length > 1 ? `<path class="chart-line" d="${path}"/>` : ""}
           ${points.map((point) => `
             <circle class="chart-dot" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4.5">
@@ -785,7 +953,7 @@ function renderEntries() {
       <div class="section-heading">
         <div>
           <h2>Recent entries</h2>
-          <p>Habit completions and mood logs in one calm feed.</p>
+          <p>Latest activity.</p>
         </div>
       </div>
       <div class="entry-list">
@@ -810,6 +978,7 @@ function renderEntries() {
 function renderInsights() {
   const userEntries = getUserEntries();
   const userMoodLogs = getUserMoodLogs();
+  const userEnergyLogs = getUserEnergyLogs();
   const userHabits = state.habits.filter(isUserHabit);
   const completedEntries = userEntries.filter((entry) => entry.type === "habit" && (
     entry.action === "complete" || entry.title?.toLowerCase().includes("completed")
@@ -841,13 +1010,14 @@ function renderInsights() {
     });
   }
 
-  if (userMoodLogs.length) {
-    const averageEnergy = Math.round(userMoodLogs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / userMoodLogs.length);
+  if (userMoodLogs.length || userEnergyLogs.length) {
+    const energyLogs = [...userEnergyLogs, ...userMoodLogs];
+    const averageEnergy = Math.round(energyLogs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / energyLogs.length);
     const latestMood = userMoodLogs[0];
     insights.push({
       title: "Energy average",
-      text: `${averageEnergy}/10 across ${userMoodLogs.length} user mood log${userMoodLogs.length === 1 ? "" : "s"}; latest mood is ${getMoodLabel(latestMood.mood).toLowerCase()}.`,
-      iconName: latestMood.mood || "calm"
+      text: `${averageEnergy}/10 across ${energyLogs.length} user energy check-in${energyLogs.length === 1 ? "" : "s"}${latestMood ? `; latest mood is ${getMoodLabel(latestMood.mood).toLowerCase()}.` : "."}`,
+      iconName: latestMood?.mood || "energized"
     });
   }
 
@@ -867,7 +1037,7 @@ function renderInsights() {
       <div class="section-heading">
         <div>
           <h2>Patterns</h2>
-          <p>Understated wellbeing signals, not a wall of analytics.</p>
+          <p>Signals from your own logs.</p>
         </div>
       </div>
       <div class="insight-list">
@@ -900,20 +1070,22 @@ function renderInsights() {
 function renderWeeklyView() {
   const userEntries = getUserEntries();
   const userMoodLogs = getUserMoodLogs();
-  const userActivityCount = userEntries.length + userMoodLogs.length;
+  const userEnergyLogs = getUserEnergyLogs();
+  const userActivityCount = userEntries.length + userMoodLogs.length + userEnergyLogs.length;
   const completionCount = userEntries.filter((entry) => entry.type === "habit" && (
     entry.action === "complete" || entry.title?.toLowerCase().includes("completed")
   )).length;
-  const averageEnergy = userMoodLogs.length
-    ? Math.round(userMoodLogs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / userMoodLogs.length)
+  const energyLogs = [...userMoodLogs, ...userEnergyLogs];
+  const averageEnergy = energyLogs.length
+    ? Math.round(energyLogs.reduce((sum, log) => sum + Number(log.energy || 0), 0) / energyLogs.length)
     : 0;
-  const score = Math.min(100, Math.round(((completionCount * 12) + (userMoodLogs.length * 10) + (averageEnergy * 4))));
+  const score = Math.min(100, Math.round(((completionCount * 12) + (userMoodLogs.length * 10) + (userEnergyLogs.length * 6) + (averageEnergy * 4))));
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => [
     day,
     userActivityCount && index < Math.min(7, userActivityCount) ? "is-ok" : "is-empty"
   ]);
   const summary = userActivityCount
-    ? `${completionCount} habit completion${completionCount === 1 ? "" : "s"} and ${userMoodLogs.length} mood log${userMoodLogs.length === 1 ? "" : "s"} are shaping this local weekly view.`
+    ? `${completionCount} habit completion${completionCount === 1 ? "" : "s"}, ${userMoodLogs.length} mood log${userMoodLogs.length === 1 ? "" : "s"}, and ${userEnergyLogs.length} energy check-in${userEnergyLogs.length === 1 ? "" : "s"} are shaping this local weekly view.`
     : "Not enough user activity yet. Log a mood or complete a habit to build a real weekly view.";
 
   return `
@@ -921,7 +1093,7 @@ function renderWeeklyView() {
       <div class="section-heading">
         <div>
           <h2>Weekly view</h2>
-          <p>A compact rhythm check for consistency and energy.</p>
+          <p>Local consistency this week.</p>
         </div>
         <span class="mini-label">${userActivityCount ? `${score}%` : "No data"}</span>
       </div>
@@ -943,15 +1115,8 @@ function renderWeeklyView() {
 function renderTodayPage() {
   return `
     ${renderQuickActions()}
-    ${renderKpis()}
-    <div class="dashboard-grid">
-      <div>
-        ${renderAttention()}
-      </div>
-      <div>
-        ${renderEntries()}
-      </div>
-    </div>
+    ${renderRabbitCoach()}
+    ${renderEntries()}
   `;
 }
 
@@ -971,8 +1136,10 @@ function renderMoodPage() {
 
 function renderPatternsPage() {
   return `
+    ${renderKpis()}
     <div class="dashboard-grid">
       <div>
+        ${renderAttention()}
         ${renderInsights()}
         ${renderMoodTrendChart()}
       </div>
@@ -997,13 +1164,16 @@ function updateActiveTab() {
 }
 
 function renderApp() {
-  root.dataset.theme = state.theme;
-  themeMeta?.setAttribute("content", state.theme === "dark" ? "#121313" : "#f4efe5");
+  const resolvedTheme = getResolvedTheme();
+  state.theme = resolvedTheme;
+  root.dataset.theme = resolvedTheme;
+  themeMeta?.setAttribute("content", resolvedTheme === "dark" ? "#121313" : "#f4efe5");
   app.innerHTML = `
     ${renderTopbar()}
     ${renderPageContent()}
   `;
   updateActiveTab();
+  updateThemeModeControls();
   bindAppEvents();
 }
 
@@ -1016,9 +1186,6 @@ function bindAppEvents() {
   });
   app.querySelectorAll("[data-open-settings]").forEach((button) => {
     button.addEventListener("click", () => openSheet(settingsSheet));
-  });
-  app.querySelectorAll("[data-toggle-theme]").forEach((button) => {
-    button.addEventListener("click", toggleTheme);
   });
   app.querySelectorAll("[data-complete-habit]").forEach((button) => {
     button.addEventListener("click", () => completeHabit(Number(button.dataset.completeHabit)));
@@ -1036,6 +1203,8 @@ function bindAppEvents() {
     button.addEventListener("click", () => selectMood(button.dataset.selectMood));
   });
   app.querySelector("[data-lock-mood]")?.addEventListener("click", lockSelectedMood);
+  app.querySelector("[data-energy-input]")?.addEventListener("input", (event) => updateInlineEnergy(event.currentTarget));
+  app.querySelector("[data-log-energy]")?.addEventListener("click", logEnergyFromInput);
   app.querySelectorAll("[data-delete-mood-log]").forEach((button) => {
     button.addEventListener("click", () => deleteMoodLog(decodeURIComponent(button.dataset.deleteMoodLog)));
   });
@@ -1100,6 +1269,7 @@ function updateMoodEnergyValue() {
 function openSheet(sheet) {
   backdrop.hidden = false;
   sheet.hidden = false;
+  updateThemeModeControls();
 }
 
 function closeSheets() {
@@ -1111,10 +1281,7 @@ function closeSheets() {
 }
 
 function toggleTheme() {
-  state.theme = state.theme === "dark" ? "light" : "dark";
-  saveState();
-  renderApp();
-  showToast(`${state.theme === "dark" ? "Dark" : "Light"} theme on`);
+  setThemeMode(getResolvedTheme() === "dark" ? "light" : "dark");
 }
 
 function completeHabit(id) {
@@ -1139,7 +1306,7 @@ function completeHabit(id) {
   });
   saveState();
   renderApp();
-  showToast(`${habit.name} marked complete`);
+  showToast(`${habit.name} marked complete`, "success");
 }
 
 function undoHabit(id) {
@@ -1150,7 +1317,7 @@ function undoHabit(id) {
   habit.last = "Due today";
   saveState();
   renderApp();
-  showToast(`${habit.name} moved back to due`);
+  showToast(`${habit.name} moved back to due`, "neutral");
 }
 
 function deleteHabit(id) {
@@ -1221,11 +1388,52 @@ function lockSelectedMood() {
   createMoodLog({ mood, energy: state.energy, note: "Quick mood check-in" });
   saveState();
   renderApp();
-  showToast(`${mood.label} logged`);
+  showToast(`${mood.label} logged`, "success");
 }
 
-function showToast(message) {
-  toastRegion.innerHTML = `<div class="toast">${message}</div>`;
+function updateInlineEnergy(input) {
+  const energy = Math.min(10, Math.max(1, Number(input.value || state.energy || 1)));
+  const output = app.querySelector("[data-energy-output]");
+  const heading = app.querySelector("[data-energy-heading]");
+
+  if (output) output.textContent = `${energy}/10`;
+  if (heading) heading.textContent = `${energy}/10 energy`;
+}
+
+function createEnergyLog(energy) {
+  const createdAt = new Date().toISOString();
+  state.energy = energy;
+  state.energyLogs = state.energyLogs || [];
+  state.energyLogs.unshift({ id: Date.now(), energy, date: "Today", note: "Energy check-in", source: "user", createdAt });
+  state.entries.unshift({
+    id: Date.now() + 1,
+    source: "user",
+    action: "energy",
+    createdAt,
+    type: "energy",
+    icon: "energized",
+    title: "Energy logged",
+    meta: `Energy ${energy}/10`,
+    time: "Just now"
+  });
+}
+
+function logEnergyFromInput() {
+  const input = app.querySelector("[data-energy-input]");
+  const energy = Math.min(10, Math.max(1, Number(input?.value || state.energy || 1)));
+  createEnergyLog(energy);
+  saveState();
+  renderApp();
+  showToast("Energy logged", "success");
+}
+
+function showToast(message, tone = "neutral") {
+  toastRegion.innerHTML = `
+    <div class="toast is-${tone}">
+      <span class="toast-dot" aria-hidden="true"></span>
+      <span>${message}</span>
+    </div>
+  `;
   window.setTimeout(() => {
     toastRegion.innerHTML = "";
   }, 2200);
@@ -1259,7 +1467,7 @@ function addHabit(event) {
     saveState();
     closeSheets();
     renderApp();
-    showToast("Habit updated");
+    showToast("Habit updated", "success");
     return;
   }
 
@@ -1294,7 +1502,7 @@ function addHabit(event) {
   saveState();
   closeSheets();
   renderApp();
-  showToast("Habit added");
+  showToast("Habit added", "success");
 }
 
 function addMood(event) {
@@ -1310,7 +1518,7 @@ function addMood(event) {
   saveState();
   closeSheets();
   renderApp();
-  showToast("Mood logged");
+  showToast("Mood logged", "success");
 }
 
 tabButtons.forEach((button) => {
@@ -1355,6 +1563,14 @@ removeSampleDataButton?.addEventListener("click", removeSampleData);
 exportBackupButton?.addEventListener("click", exportBackup);
 importBackupButton?.addEventListener("click", () => importBackupFile?.click());
 importBackupFile?.addEventListener("change", () => importBackupFileContents(importBackupFile.files?.[0]));
+themeModeButtons.forEach((button) => {
+  button.addEventListener("click", () => setThemeMode(button.dataset.themeMode));
+});
+systemThemeQuery.addEventListener("change", () => {
+  if (getThemeMode() === "auto") {
+    renderApp();
+  }
+});
 backdrop.addEventListener("click", closeSheets);
 habitForm.addEventListener("submit", addHabit);
 moodForm.addEventListener("submit", addMood);

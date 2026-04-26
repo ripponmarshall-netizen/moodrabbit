@@ -1,11 +1,11 @@
-const CACHE_NAME = "moodrabbit-shell-v6";
+const CACHE_NAME = "moodrabbit-shell-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./styles.css?v=polish-3",
+  "./styles.css?v=rabbit-3",
   "./app.js",
-  "./app.js?v=polish-2",
+  "./app.js?v=rabbit-3",
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/icon-192.png",
